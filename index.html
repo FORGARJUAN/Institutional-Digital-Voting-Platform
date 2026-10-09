@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  
+  <style>
+    body { background-color: #f0f2f5; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    
+    /* GESTIÓN DE VISTAS */
+    .vista { display: none !important; } 
+    .vista-activa { display: block !important; animation: fadeIn 0.4s; }
+    
+    #vista-login.vista-activa, #vista-final.vista-activa { 
+        display: flex !important; 
+        justify-content: center; 
+        align-items: center; 
+        min-height: 90vh;
+    }
+
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+    /* --- TARJETONES --- */
+    .candidato-columna { 
+        display: flex; 
+        justify-content: center; 
+        margin-bottom: 30px; 
+    }
+    
+    .candidato-card {
+      background: #fff;
+      border: 3px solid #e0e0e0;
+      border-radius: 20px; 
+      cursor: pointer;
+      position: relative; 
+      overflow: hidden; 
+      aspect-ratio: 10 / 12.5; 
+      width: 100%; 
+      max-width: 450px; 
+      transition: all 0.2s ease-in-out;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+    }
+
+    .candidato-card:hover { 
+        transform: scale(1.02); 
+        border-color: #aaa;
+        box-shadow: 0 15px 30px rgba(0,0,0,0.2);
+    }
+
+    .candidato-card.seleccionado { 
+      border-color: #0d6efd;
+      box-shadow: 0 0 0 8px rgba(13, 110, 253, 0.3);
+    }
+
+    .candidato-img { 
+      width: 100%; height: 100%; object-fit: cover; display: block;
+    }
+
+    .check-icon { 
+      position: absolute; top: 20px; right: 20px; 
+      background: #0d6efd; color: white; border-radius: 50%; 
+      padding: 10px; font-size: 30px; 
+      opacity: 0; transform: scale(0);
+      transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      z-index: 10;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+    }
+    
+    .candidato-card.seleccionado .check-icon { opacity: 1; transform: scale(1); }
+
+    /* BOTONES SUPERIORES */
+    .nav-btn { border-radius: 50px; padding: 10px 25px; font-weight: bold; display: flex; align-items: center; gap: 10px; }
+
+    /* IMPRESIÓN */
+    @media print {
+      .no-print { display: none !important; }
+      .card { border: none !important; box-shadow: none !important; }
+      body { background: white; }
+      .break-page { page-break-inside: avoid; page-break-after: always; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="modal fade" id="miModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content text-center p-4 border-0 shadow">
+        <div class="mb-3 text-warning"><span class="material-icons" style="font-size: 50px;">info</span></div>
+        <h4 id="modal-titulo" class="fw-bold mb-3">Atención</h4>
+        <p id="modal-mensaje" class="lead text-muted"></p>
+        <button type="button" class="btn btn-dark px-5 rounded-pill" data-bs-dismiss="modal">Entendido</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="vista-login" class="vista vista-activa">
+    <div class="card shadow-lg p-5 border-0" style="width: 100%; max-width: 450px; border-radius: 25px;">
+      <div class="text-center mb-5">
+        <span class="material-icons text-primary" style="font-size: 80px;">how_to_vote</span>
+        <h2 class="mt-3 fw-bold">Plataforma Electoral</h2>
+      </div>
+      <div class="form-floating mb-3">
+        <input type="text" id="user" class="form-control" placeholder="Usuario">
+        <label>Usuario</label>
+      </div>
+      <div class="form-floating mb-4">
+        <input type="password" id="pass" class="form-control" placeholder="Contraseña">
+        <label>Contraseña</label>
+      </div>
+      <button class="btn btn-primary w-100 btn-lg rounded-pill fw-bold" onclick="login()">INGRESAR</button>
+      <div id="login-error" class="text-danger mt-3 text-center fw-bold small"></div>
+    </div>
+  </div>
+
+  <div id="vista-admin" class="vista container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4 no-print bg-white p-4 rounded shadow-sm">
+      <h4 class="m-0 fw-bold text-primary">📊 Panel de Control y Auditoría</h4>
+      <div>
+        <button class="btn btn-outline-dark me-2" onclick="window.print()">🖨️ Imprimir PDF</button>
+        <button class="btn btn-danger" onclick="cerrarSesion()">Salir</button>
+      </div>
+    </div>
+
+    <div class="card p-3 mb-4 shadow-sm border-0 bg-white no-print" style="border-radius: 15px;">
+      <div class="row g-3">
+        <div class="col-md-3">
+          <label class="form-label fw-bold text-muted small"><span class="material-icons align-middle fs-6">how_to_reg</span> Por Mesa</label>
+          <select id="filtro-mesa" class="form-select border-primary" onchange="aplicarFiltrosAdmin()">
+            <option value="TODAS">Todas las Mesas</option>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label fw-bold text-muted small"><span class="material-icons align-middle fs-6">school</span> Por Curso</label>
+          <select id="filtro-curso" class="form-select border-primary" onchange="aplicarFiltrosAdmin()">
+            <option value="TODOS">Todos los Cursos</option>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label fw-bold text-muted small"><span class="material-icons align-middle fs-6">how_to_vote</span> Por Elección</label>
+          <select id="filtro-cargo" class="form-select border-primary" onchange="aplicarFiltrosAdmin()">
+            <option value="TODOS">Todas las Elecciones</option>
+          </select>
+        </div>
+        <div class="col-md-3 d-flex align-items-end">
+          <button class="btn btn-primary w-100 fw-bold" onclick="cargarEstadisticas()">
+            <span class="material-icons align-middle fs-5">refresh</span> Actualizar
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="row mb-4 text-center g-3">
+      <div class="col-md-4">
+        <div class="card p-4 border-0 shadow-sm bg-primary text-white h-100" style="border-radius: 15px;">
+          <h6 class="opacity-75">Votos Filtrados</h6>
+          <h1 id="stats-votos" class="fw-bold display-4">0</h1>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="card p-4 border-0 shadow-sm bg-success text-white h-100" style="border-radius: 15px;">
+          <h6 class="opacity-75">Participación Global</h6>
+          <h1 id="stats-porcentaje" class="fw-bold display-4">0%</h1>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="card p-4 border-0 shadow-sm h-100" style="border-radius: 15px;">
+          <h6 class="text-muted">Censo Total Institucional</h6>
+          <h1 id="stats-censo" class="fw-bold display-4 text-secondary">0</h1>
+        </div>
+      </div>
+    </div>
+
+    <div class="card p-4 mb-4 border-0 shadow-sm break-page" style="border-radius: 15px;">
+      <h5 class="fw-bold text-dark mb-3"><span class="material-icons align-middle text-primary">insights</span> Momentos de Afluencia (Votos por Hora)</h5>
+      <canvas id="chart-afluencia" height="70"></canvas>
+    </div>
+
+    <div id="contenedor-graficas" class="row">
+      </div>
+  </div>
+
+  <div id="vista-jurado" class="vista container mt-5">
+    <div class="d-flex justify-content-between mb-4 align-items-center">
+      <h3 class="fw-bold text-dark">Panel de Mesa</h3>
+      <button class="btn btn-outline-danger btn-sm" onclick="cerrarSesion()">Cerrar Sesión</button>
+    </div>
+    
+    <div class="card p-5 shadow border-0" style="border-radius: 20px;">
+      <div class="alert alert-info d-flex align-items-center mb-4" role="alert">
+        <span class="material-icons me-2">auto_awesome</span>
+        <div>Selecciona el curso. El sistema <b>sugerirá automáticamente</b> al siguiente estudiante de la lista.</div>
+      </div>
+
+      <div class="row g-4 align-items-end">
+        <div class="col-md-5">
+          <label class="form-label fw-bold h5">1. Curso</label>
+          <select id="select-curso" class="form-select form-select-lg" onchange="cargarEstudiantes(false)">
+            <option value="">-- Cursos Pendientes --</option>
+          </select>
+        </div>
+        <div class="col-md-5">
+          <label class="form-label fw-bold h5">2. Estudiante</label>
+          <select id="select-estudiante" class="form-select form-select-lg" disabled>
+            <option value="">-- Esperando curso --</option>
+          </select>
+        </div>
+        <div class="col-md-2">
+          <button id="btn-habilitar" class="btn btn-success w-100 btn-lg py-3 fw-bold" onclick="iniciarVotacion()" disabled>VOTAR</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="vista-votacion" class="vista container pb-5 mt-4">
+    <div class="progress mb-4" style="height: 10px; border-radius: 5px;">
+      <div id="barra-progreso" class="progress-bar bg-primary" style="width: 0%;"></div>
+    </div>
+    <div id="tarjeton-contenido"></div>
+  </div>
+
+  <div id="vista-final" class="vista">
+    <div class="card p-5 shadow-lg border-0 text-center" style="border-radius: 30px; max-width: 600px; width: 90%;">
+      <div class="mb-4 text-success animate__animated animate__bounceIn">
+        <span class="material-icons" style="font-size: 120px;">check_circle</span>
+      </div>
+      <h1 class="fw-bold mb-3 display-5">¡Voto Registrado!</h1>
+      <p class="text-muted mb-5 lead">Gracias por participar. Puedes retirarte.</p>
+      
+      <button class="btn btn-primary btn-lg w-100 rounded-pill py-3 fw-bold shadow" onclick="volverJurado()">
+        <span class="material-icons align-middle me-2">person_add</span> Habilitar Siguiente
+      </button>
+    </div>
+  </div>
+
+  <script>
+    let modal = new bootstrap.Modal(document.getElementById('miModal'));
+    let datosEleccion = [], votos = [];
+    let paso = 0;
+    let estudiante = {};
+    let ultimoCursoSeleccionado = ""; 
+    let juradoActual = ""; 
+    
+    // VARIABLES GLOBALES ADMIN
+    let adminDataGlobal = null;
+    let chartAfluenciaObj = null;
+
+    function mostrarAlerta(msg) {
+      document.getElementById('modal-mensaje').innerText = msg;
+      modal.show();
+    }
+
+    function cambiarVista(id) {
+      document.querySelectorAll('.vista').forEach(v => v.classList.remove('vista-activa'));
+      document.getElementById(id).classList.add('vista-activa');
+    }
+
+    // --- LOGIN ---
+    function login() {
+      const u = document.getElementById('user').value;
+      const p = document.getElementById('pass').value;
+      const btn = document.querySelector('button[onclick="login()"]');
+      btn.disabled = true; btn.innerText = "Verificando...";
+      
+      google.script.run.withSuccessHandler(res => {
+        btn.disabled = false; btn.innerText = "INGRESAR";
+        if(!res.exito) { document.getElementById('login-error').innerText = "Credenciales incorrectas."; return; }
+        
+        if(res.rol === 'ADMIN') { 
+            cambiarVista('vista-admin'); 
+            cargarEstadisticas(); 
+        } else { 
+            juradoActual = u + " (" + res.nombre + ")"; 
+            cambiarVista('vista-jurado'); 
+            cargarCursos(); 
+        }
+      }).loginSistema(u, p);
+    }
+    
+    function cerrarSesion() {
+      document.getElementById('user').value = ""; document.getElementById('pass').value = "";
+      cambiarVista('vista-login');
+    }
+
+    // --- ADMIN ACTUALIZADO ---
+    function cargarEstadisticas() {
+      const btnActualizar = document.querySelector('button[onclick="cargarEstadisticas()"]');
+      if(btnActualizar) { btnActualizar.disabled = true; btnActualizar.innerHTML = '<span class="material-icons align-middle fs-5">hourglass_empty</span> Cargando...'; }
+
+      google.script.run.withSuccessHandler(datos => {
+        adminDataGlobal = datos;
+        
+        const selectMesa = document.getElementById('filtro-mesa');
+        const selectCurso = document.getElementById('filtro-curso');
+        const selectCargo = document.getElementById('filtro-cargo');
+        
+        let valMesa = selectMesa.value;
+        let valCurso = selectCurso.value;
+        let valCargo = selectCargo.value;
+        
+        let mesas = new Set();
+        let cursos = new Set();
+        let cargos = new Set();
+        
+        // Extraemos mesas y cursos de los votos
+        datos.votos.forEach(v => {
+            if(v.mesa) mesas.add(v.mesa);
+            if(v.curso) cursos.add(v.curso);
+        });
+
+        // Extraemos cargos de la lista de candidatos (así garantizamos que salgan todos, incluso sin votos)
+        datos.candidatos.forEach(c => {
+            if(c.cargo) cargos.add(c.cargo);
+        });
+        
+        // Llenar selectores
+        selectMesa.innerHTML = '<option value="TODAS">Todas las Mesas</option>';
+        Array.from(mesas).sort().forEach(m => selectMesa.add(new Option(m, m)));
+        if(valMesa && mesas.has(valMesa)) selectMesa.value = valMesa;
+
+        selectCurso.innerHTML = '<option value="TODOS">Todos los Cursos</option>';
+        Array.from(cursos).sort().forEach(c => selectCurso.add(new Option(c, c)));
+        if(valCurso && cursos.has(valCurso)) selectCurso.value = valCurso;
+
+        selectCargo.innerHTML = '<option value="TODOS">Todas las Elecciones</option>';
+        Array.from(cargos).sort().forEach(c => selectCargo.add(new Option(c, c)));
+        if(valCargo && cargos.has(valCargo)) selectCargo.value = valCargo;
+
+        if(btnActualizar) { btnActualizar.disabled = false; btnActualizar.innerHTML = '<span class="material-icons align-middle fs-5">refresh</span> Actualizar'; }
+        
+        aplicarFiltrosAdmin(); 
+      }).obtenerEstadisticas();
+    }
+
+    function aplicarFiltrosAdmin() {
+      if(!adminDataGlobal) return;
+      
+      const filtroMesa = document.getElementById('filtro-mesa').value;
+      const filtroCurso = document.getElementById('filtro-curso').value;
+      const filtroCargo = document.getElementById('filtro-cargo').value;
+      
+      // 1. Filtrar los votos
+      let votosFiltrados = adminDataGlobal.votos.filter(v => {
+          let pasaMesa = (filtroMesa === "TODAS" || v.mesa === filtroMesa);
+          let pasaCurso = (filtroCurso === "TODOS" || v.curso === filtroCurso);
+          let pasaCargo = (filtroCargo === "TODOS" || v.cargo === filtroCargo);
+          return pasaMesa && pasaCurso && pasaCargo;
+      });
+
+      // 2. Actualizar las tarjetas de métricas
+      document.getElementById('stats-votos').innerText = votosFiltrados.length;
+      document.getElementById('stats-censo').innerText = adminDataGlobal.censoTotal;
+      let pct = adminDataGlobal.censoTotal > 0 ? ((adminDataGlobal.votantesUnicos / adminDataGlobal.censoTotal) * 100).toFixed(1) : 0;
+      document.getElementById('stats-porcentaje').innerText = pct + "%";
+
+      // 3. Renderizar Gráfica de Afluencia
+      let horas = {};
+      votosFiltrados.forEach(v => {
+         let d = new Date(v.fecha);
+         let horaFormateada = d.getHours().toString().padStart(2, '0') + ":00";
+         if(isNaN(d.getHours())) horaFormateada = "Hora Desconocida";
+         horas[horaFormateada] = (horas[horaFormateada] || 0) + 1;
+      });
+      
+      let etiquetasHoras = Object.keys(horas).sort();
+      let datosHoras = etiquetasHoras.map(h => horas[h]);
+
+      if(chartAfluenciaObj) chartAfluenciaObj.destroy();
+      const ctxAfl = document.getElementById('chart-afluencia').getContext('2d');
+      chartAfluenciaObj = new Chart(ctxAfl, {
+         type: 'line',
+         data: {
+             labels: etiquetasHoras,
+             datasets: [{
+                 label: 'Votos Registrados',
+                 data: datosHoras,
+                 borderColor: '#0d6efd',
+                 backgroundColor: 'rgba(13, 110, 253, 0.2)',
+                 fill: true,
+                 tension: 0.4, 
+                 borderWidth: 3,
+                 pointRadius: 5,
+                 pointBackgroundColor: '#fff'
+             }]
+         },
+         options: { 
+             responsive: true, 
+             plugins: { legend: { display: false } },
+             scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
+         }
+      });
+
+      // 4. Renderizar Resultados por Cargo
+      const container = document.getElementById('contenedor-graficas');
+      container.innerHTML = "";
+      
+      let conteoResultados = {};
+      
+      // Pre-cargar todos los candidatos del cargo seleccionado (para mostrar 0 votos si es necesario)
+      adminDataGlobal.candidatos.forEach(c => {
+          let pasaCargo = (filtroCargo === "TODOS" || c.cargo === filtroCargo);
+          if (pasaCargo) {
+              if(!conteoResultados[c.cargo]) conteoResultados[c.cargo] = {};
+              conteoResultados[c.cargo][c.nombre] = 0;
+          }
+      });
+
+      // Sumar los votos
+      votosFiltrados.forEach(v => {
+          if(conteoResultados[v.cargo] !== undefined && conteoResultados[v.cargo][v.candidato] !== undefined) {
+              conteoResultados[v.cargo][v.candidato]++;
+          }
+      });
+
+      for (const [cargo, candidatosVotos] of Object.entries(conteoResultados)) {
+          let totalCargo = Object.values(candidatosVotos).reduce((a,b) => a + b, 0);
+          
+          let html = `<div class="col-md-6 mb-4 break-page">
+                        <div class="card border-0 shadow-sm h-100" style="border-radius: 15px; overflow: hidden;">
+                          <div class="card-header bg-dark text-white fw-bold text-center h5 py-3 border-0 text-uppercase">${cargo}</div>
+                          <div class="card-body bg-white">`;
+          
+          let arrayCandidatos = Object.keys(candidatosVotos).map(nombre => {
+              return { nombre: nombre, votos: candidatosVotos[nombre] };
+          }).sort((a,b) => b.votos - a.votos);
+
+          arrayCandidatos.forEach(cand => {
+              let pctVoto = totalCargo > 0 ? ((cand.votos / totalCargo)*100).toFixed(1) : 0;
+              
+              let fotoUrl = "https://via.placeholder.com/150/e9ecef/adb5bd?text=Sin+Foto";
+              let infoCand = adminDataGlobal.candidatos.find(c => c.cargo === cargo && c.nombre === cand.nombre);
+              if(infoCand && infoCand.foto) fotoUrl = infoCand.foto;
+
+              html += `
+              <div class="d-flex align-items-center mb-3 p-3 border rounded shadow-sm bg-light">
+                 <img src="${fotoUrl}" onerror="this.src='https://via.placeholder.com/150/e9ecef/adb5bd?text=Error'" class="rounded-circle object-fit-cover shadow-sm bg-white" style="width: 70px; height: 70px; border: 3px solid #dee2e6;">
+                 <div class="ms-3 flex-grow-1">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                       <span class="fw-bold fs-5">${cand.nombre}</span>
+                       <span class="badge bg-primary fs-6 px-3 py-2 rounded-pill shadow-sm">${cand.votos} Votos (${pctVoto}%)</span>
+                    </div>
+                    <div class="progress" style="height: 12px; border-radius: 10px;">
+                       <div class="progress-bar bg-success progress-bar-striped progress-bar-animated" style="width: ${pctVoto}%"></div>
+                    </div>
+                 </div>
+              </div>`;
+          });
+
+          html += `</div></div></div>`;
+          container.innerHTML += html;
+      }
+      
+      if(Object.keys(conteoResultados).length === 0) {
+          container.innerHTML = `<div class="col-12"><div class="alert alert-warning text-center">No hay datos para mostrar con estos filtros.</div></div>`;
+      }
+    }
+
+    // --- JURADO ---
+    function cargarCursos() {
+      const select = document.getElementById('select-curso');
+      select.innerHTML = '<option value="">Cargando...</option>';
+      google.script.run.withSuccessHandler(cursos => {
+        select.innerHTML = '<option value="">-- Cursos Pendientes --</option>';
+        cursos.forEach(c => select.add(new Option(c, c)));
+        
+        if(ultimoCursoSeleccionado && cursos.includes(ultimoCursoSeleccionado)) {
+           select.value = ultimoCursoSeleccionado;
+           cargarEstudiantes(true);
+        }
+      }).obtenerCursosPendientes();
+    }
+
+    function cargarEstudiantes(autoSeleccionarSiguiente = false) {
+      const curso = document.getElementById('select-curso').value;
+      const selectEst = document.getElementById('select-estudiante');
+      const btn = document.getElementById('btn-habilitar');
+      
+      ultimoCursoSeleccionado = curso; 
+      
+      selectEst.innerHTML = '<option>Cargando lista...</option>';
+      selectEst.disabled = true; btn.disabled = true;
+      
+      if(!curso) return;
+
+      google.script.run.withSuccessHandler(estudiantes => {
+        selectEst.innerHTML = '<option value="">-- Seleccionar --</option>';
+        
+        if(estudiantes.length === 0) {
+            selectEst.innerHTML = '<option value="">Todos votaron</option>';
+            return;
+        }
+
+        estudiantes.forEach(est => {
+          let opt = document.createElement('option');
+          opt.value = est.codigo; opt.innerText = est.nombre;
+          selectEst.appendChild(opt);
+        });
+        
+        selectEst.disabled = false;
+        
+        if(autoSeleccionarSiguiente && estudiantes.length > 0) {
+           setTimeout(() => {
+               selectEst.selectedIndex = 1; 
+               btn.disabled = false; 
+               btn.removeAttribute('disabled');
+           }, 50);
+        }
+
+        selectEst.onchange = () => { 
+            if(selectEst.value !== "") {
+                btn.disabled = false;
+                btn.removeAttribute('disabled');
+            } else {
+                btn.disabled = true;
+            }
+        };
+      }).obtenerEstudiantesPendientes(curso);
+    }
+
+    function iniciarVotacion() {
+      const curso = document.getElementById('select-curso').value;
+      const codigo = document.getElementById('select-estudiante').value;
+      estudiante = { curso, codigo };
+
+      google.script.run.withSuccessHandler(elecciones => {
+        datosEleccion = elecciones;
+        if(elecciones.length === 0) { mostrarAlerta("No hay votaciones disponibles."); return; }
+        paso = 0; votos = [];
+        cambiarVista('vista-votacion');
+        renderizarTarjeton();
+      }).obtenerTarjeton(curso);
+    }
+
+    // --- VOTACIÓN ---
+    function renderizarTarjeton() {
+      const actual = datosEleccion[paso];
+      const container = document.getElementById('tarjeton-contenido');
+      document.getElementById('barra-progreso').style.width = ((paso + 1) / datosEleccion.length) * 100 + "%";
+
+      let btnSiguienteTexto = (paso === datosEleccion.length - 1) ? "FINALIZAR" : "SIGUIENTE";
+      let btnSiguienteClase = (paso === datosEleccion.length - 1) ? "btn-success" : "btn-primary";
+      let icono = (paso === datosEleccion.length - 1) ? "check" : "arrow_forward";
+
+      let html = `
+      <div class="d-flex justify-content-between align-items-center mb-5">
+        <button class="btn btn-outline-secondary nav-btn" onclick="moverPaso(-1)" ${paso === 0 ? 'disabled' : ''}>
+           <span class="material-icons">arrow_back</span> Atrás
+        </button>
+        <h2 class="fw-bold m-0 text-uppercase">${actual.cargo}</h2>
+        <button class="btn ${btnSiguienteClase} nav-btn shadow" onclick="moverPaso(1)">
+           ${btnSiguienteTexto} <span class="material-icons">${icono}</span>
+        </button>
+      </div>`;
+      
+      html += `<div class="row g-5 justify-content-center">`;
+      
+      actual.candidatos.forEach(c => {
+        let imgError = "https://via.placeholder.com/500x550/e9ecef/adb5bd?text=Sin+Imagen";
+        
+        html += `
+        <div class="col-12 col-md-6 col-lg-4 candidato-columna">
+          <div class="candidato-card shadow" onclick="seleccionar(this, '${actual.cargo}', '${c.nombre}')">
+            <span class="material-icons check-icon">check</span>
+            <img src="${c.foto}" class="candidato-img" onerror="this.src='${imgError}'">
+            <input type="radio" name="${actual.cargo}" value="${c.nombre}" class="d-none">
+          </div>
+        </div>`;
+      });
+      html += `</div>`;
+      
+      container.innerHTML = html;
+      window.scrollTo(0,0);
+    }
+
+    function seleccionar(div, cargo, candidato) {
+      document.querySelectorAll('.candidato-card').forEach(c => c.classList.remove('seleccionado'));
+      div.classList.add('seleccionado');
+      div.querySelector('input').checked = true;
+    }
+
+    function moverPaso(dir) {
+      const actual = datosEleccion[paso];
+      if(dir === 1) {
+        const checked = document.querySelector(`input[name="${actual.cargo}"]:checked`);
+        if(!checked) { mostrarAlerta("Debes tocar una imagen para seleccionar tu voto."); return; }
+        votos[paso] = { cargo: actual.cargo, candidato: checked.value };
+        if(paso < datosEleccion.length - 1) { paso++; renderizarTarjeton(); } else { enviarVotos(); }
+      } else { paso--; renderizarTarjeton(); }
+    }
+
+    function enviarVotos() {
+      const botones = document.querySelectorAll('button'); 
+      botones.forEach(b => b.disabled = true);
+      
+      const paquete = { 
+          codigoEstudiante: estudiante.codigo, 
+          curso: estudiante.curso, 
+          votos: votos,
+          mesa: juradoActual 
+      };
+      
+      google.script.run.withSuccessHandler(() => {
+        cambiarVista('vista-final');
+        botones.forEach(b => b.disabled = false);
+      }).registrarVotoFinal(paquete);
+    }
+
+    function volverJurado() {
+      document.getElementById('select-estudiante').innerHTML = "";
+      document.getElementById('btn-habilitar').disabled = true;
+      cambiarVista('vista-jurado');
+      cargarCursos();
+    }
+  </script>
+</body>
+</html>
